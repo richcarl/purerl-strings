@@ -1,6 +1,13 @@
 -module(data_string_codeUnits@foreign).
 -export([fromCharArray/1, toCharArray/1, singleton/1, '_charAt'/4,  '_toChar'/3,length/1, '_indexOf'/4, '_indexOfStartingAt'/5,'_lastIndexOf'/4,'_lastIndexOfStartingAt'/5,take/2, drop/2, countPrefix/2, '_slice'/3, splitAt/2]).
 
+%% Note: a Char corresponds to a single UTF-16 code unit (2 bytes) in the
+%% JS backend, but we reinterpret it as a UTF-8 code unit (1 byte) in the
+%% Erlang backend. There is currently no separate CodeUnit type, but it is
+%% possible that this will be added. For practical reasons we don't try to
+%% limit chars to 16 bits only - they can hold any single unicode code
+%% point.
+
 fromCharArray(A) -> case unicode:characters_to_binary(array:to_list(A)) of
   {error, S, _} -> S; % In case of hitting bad character, return initial portion!
   S -> S
@@ -8,7 +15,7 @@ end.
 
 toCharArray(S) -> array:from_list(unicode:characters_to_list(S)).
 
-singleton(C) -> <<C>>.
+singleton(C) -> unicode:characters_to_binary([C], utf8).
 
 '_charAt'(Just,Nothing,I,S) ->
   case byte_size(S) of
