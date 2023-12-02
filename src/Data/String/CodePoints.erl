@@ -7,19 +7,21 @@
        , '_toCodePointArray'/1]).
 
 '_unsafeCodePointAt0'(_Fallback) -> fun (Str) ->
-    case unicode:characters_to_list(Str) of
-        [CP|_] -> CP;
-        _ -> error("told you I was unsafe")
+    case string:next_codepoint(Str) of
+        [CP|_Rest] -> CP;
+        _ -> error(badarg)  % malformed utf-8
     end
 end.
 
 '_codePointAt'(_Fallback, Just, Nothing, _unsafeCodePointAt0, Index, Str) ->
-    Cps = unicode:characters_to_list(Str, utf8),
-    case length(Cps) of
-        Length when Index < 0, Index >= Length -> Nothing;
-        _ -> Just(lists:nth(Index+1, Cps))
-    end
-.
+    if is_integer(Index), Index >= 0, Index < byte_size(Str) ->
+            <<_:Index/binary,S/binary>> = Str,
+            case string:next_codepoint(S) of
+                [CP | _Rest] -> Just(CP);
+                _ -> Nothing  % malformed utf-8
+            end;
+       true -> Nothing
+    end.
 
 '_fromCodePointArray'(_Fallback, Array) ->
   List = array:to_list(Array),
@@ -28,12 +30,21 @@ end.
 '_singleton'(_Fallback) -> fun (CP) ->
     unicode:characters_to_binary([CP], utf8)
 end.
+
 '_take'(_Fallback) ->
     fun (N) ->
-        fun (S) ->
-            unicode:characters_to_binary(lists:sublist(unicode:characters_to_list(S, utf8), N), utf8)
-        end
+        fun (S) -> take(N, S, <<>>) end
     end.
+
+take(N, _S, Cs) when N =< 0 -> Cs;
+take(_N, <<>>, _Cs) -> <<>>;  % trying to take too many yields empty string
+take(N, S, Cs) ->
+    %% note that right-appending to a binary in a loop is efficient
+    case string:next_codepoint(S) of
+        [CP | Rest] -> take(N-1, Rest, <<Cs/binary, CP/utf8>>);
+        _ -> error(badarg)  % malformed utf-8
+    end.
+
 '_toCodePointArray'(_Fallback) -> fun (_UnsafeCodePointAt0) ->
     fun (Str) ->
         array:from_list(unicode:characters_to_list(Str, utf8))
